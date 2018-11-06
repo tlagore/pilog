@@ -76,3 +76,9 @@ class PiLoggee():
                 traceback.print_exc()
             else:
                 print("Shutting down")
+
+    def eprint(self, *args, **kwargs):
+        print(*args, file=sys.stderr, **kwargs)
+
+    def time_message(self, message):
+        return datetime.now().strftime("!! %H:%M:%S: ") + message
