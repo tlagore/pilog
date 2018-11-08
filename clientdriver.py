@@ -16,11 +16,17 @@ def main():
         else:
             logDir = None
 
+        config = {
+            "host": host,
+            "port": port,
+            "log_directory": logDir
+        }
+
         if port < 1 or port > 65535:
             raise ValueError("port must be a valid integer between 1 and 65535")
 
 
-        logger = PiLogger(host, port, logDir)
+        logger = PiLogger(config)
 
     except ValueError as e:
         print("port must be a valid integer between 1 and 65535")
