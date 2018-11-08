@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import socket
 import sys
 import time
@@ -8,12 +9,37 @@ import errno
 from message_socket.message_socket import MessageSocket, MessageType, PiLogMsg
 
 class PiLogger():
-    def __init__(self, host, port):
+    DEFAULT_DIR = os.path.join(os.getcwd(), "pilog_logs/")
+
+    def __init__(self, host, port, logDirectory = None):
         """ """
         self._host = host
         self._port = port
         self._initialized = False
+        self.initialize_log_dir(logDirectory)
+
+        return
         self.intialize(host, port)
+
+    def initialize_log_dir(self, logDirectory):
+        """ ensures that the either the supplied directory or the default store directory has been created """
+        if logDirectory:
+            if not os.path.exists(logDirectory):
+                self.try_mkdir(logDirectory, errorMsg="LogDirectory did not exist and could not be created")
+                self._logDirectory = logDirectory
+            elif not os.path.isdir(logDirectory):
+                raise PiLogError("Supplied log directory is not a directory")
+        else: 
+            if not os.path.exists(self.DEFAULT_DIR):
+                self.try_mkdir(self.DEFAULT_DIR, errorMsg="No log directory supplied and default directory could not be created")
+            self._logDirectory = self.DEFAULT_DIR
+                    
+    def try_mkdir(self, dir, mode=664, errorMsg="Could not make directory"):
+        """ wraps mkdir in a try block with optional specified error message and mode """
+        try:
+            os.mkdir(dir, mode)
+        except:
+            raise PiLogError(errorMsg)
 
     def initialize(self):
         """ attempts to reinitialize with the currently specified host and port """

@@ -6,6 +6,9 @@ __pycache__/
 #virtual environment
 /.venv/
 
+
+/pilog_logs/*
+
 # C extensions
 *.so
 
