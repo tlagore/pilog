@@ -1,4 +1,4 @@
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 import mmap
 import os
 import struct
@@ -8,7 +8,8 @@ from utilities.utilities import eprint, time_message
 
 class Mmapper:
     HEADER_SIZE = 16
-    DEFAULT_WORKERS = 4
+    NUM_WORKERS = 4
+    MAX_PUT_FAILS = 100
 
     def __init__(self, logDir, fileSize, primary, secondary):
         """ """
@@ -18,6 +19,7 @@ class Mmapper:
         self._swapLock = threading.Lock()
         self._writeLock = threading.Lock()
         self._msgQueue = Queue(2500)
+        self._failedPuts = 0
 
         self.initialize_log_dir(logDir)
         self.initialize_log_file(self._primaryFile)
@@ -27,8 +29,8 @@ class Mmapper:
         self._workers = []
         self._running = True
 
-        for i in range(0, self.DEFAULT_WORKERS):
-            self._workers.append(threading.Thread(target=self._handle_messages))
+        for i in range(0, self.NUM_WORKERS):
+            self._workers.append(threading.Thread(target=self._handle_messages, args=(i,)))
             self._workers[i].start() 
 
 
@@ -36,6 +38,9 @@ class Mmapper:
         try:
             self._primary = open(self._primaryFile, "r+b")
             self._secondary = open(self._secondaryFile, "r+b")
+
+            self._primary.flush()
+            self._secondary.flush()
             #0 means whole file
             self._mcurrent = mmap.mmap(self._primary.fileno(), 0, access=mmap.ACCESS_WRITE)
             self._msecondary = mmap.mmap(self._secondary.fileno(), 0, access=mmap.ACCESS_WRITE)
@@ -46,36 +51,53 @@ class Mmapper:
             return False     
 
 
-    def _handle_messages(self):
+    def _handle_messages(self, args):
         """ """
+        workerNum = args
+
+        print(time_message("Worker {0} starting up".format(workerNum))) 
         while self._running:
             try:
                 if self._running:
                     msg = self._msgQueue.get(True, 2)
             except Empty as ex:
                 # simply means we couldn't get an item in the timeout
+                print(time_message("Worker {0} no messages".format(workerNum))) 
+                print(self._running)
                 continue
             except Exception as ex:
                 eprint(time_message("Exception in handle_messages! {0}".format(ex)))
 
+        print(time_message("Worker {0} exitting".format(workerNum))) 
+
 
     def log(self, msg):
+        """ """
+        try:
+            self._msgQueue.put_nowait(msg)
+        except Full as ex:
+            self._failedPuts += 1
+
+    def _log(self, msg):
         payload = msg.payload.encode(encoding='UTF-8')
         if (self._index + (len(payload) + self.HEADER_SIZE) <= self._fileSize):
             lvl = struct.pack("I", int(msg.level.value))
-            id = struct.pack("I", int(msg.id))
+            msgid = struct.pack("I", int(msg.id))
             length = struct.pack("I", len(payload))
             reserved = struct.pack("I", 0)
 
-            self._mcurrent[self._index:self.INT_SIZE] = lvl
-            self._mcurrent[self._in]
+            self._write_field(lvl)
+            self._write_field(msgid)
+            self._write_field(length)
+            self._write_field(reserved)
+            self._write_field(payload)
 
-            self._mcurrent[self._index:len(encoded)] = encoded
-            self._index += len(encoded)
 
-    def write_field(self, field):
-        self._mcurrent[self._index:len(field)]
-        self._index += 
+    def _write_field(self, field):
+        print("_mcurrent[{0}:{1}] {2}".format(self._index, len(field), field))
+        self._mcurrent[self._index:self._index+len(field)] = field
+        self._index += len(field) + 1
+        self._mcurrent.seek(self._index)
 
     def force_swap(self):
         self._swap()
@@ -93,17 +115,24 @@ class Mmapper:
     def write_log(self):
         """ """
 
-
     def close(self):
         """ """
+        print("close()")
         try:
-            self._primaryFile.close()
-            self._secondaryFile.close()
+            self._running = False
+            self._primary.close()
+            self._secondary.close()
             self._mcurrent.close()
             self._msecondary.close()
+
+            for i in range(0, self.NUM_WORKERS):
+                self._workers[i].join()
+
         except Exception as ex:
             eprint(time_message("Error closing Mmapper {0}".format(ex)))
             return False
+
+        print(time_message("MMapper Shutting down"))
 
     def initialize_log_file(self, curfile):
         """ initializes the log file """
@@ -140,6 +169,7 @@ class Mmapper:
                     
     def __del__(self):
         """ """
+        print("__del__")
         self.close()
 
 class MMapperException(Exception):

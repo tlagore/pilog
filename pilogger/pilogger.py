@@ -3,6 +3,7 @@ import os
 import socket
 import sys
 import time
+import time
 import traceback
 import errno
 
@@ -48,12 +49,15 @@ class PiLogger():
             if not self._logger.open():
                 raise PiLogError("Failed to open memory mapped file.")
 
-            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=0, mPayload="Hello World!")
-            self._logger.log(msg)
+            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=0, mPayload="Hello diddily World!")
+            self._logger._log(msg)
             self._logger.force_swap()
-            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=1, mPayload="Hello Second World!")
-            self._logger.log(msg)
+            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=1, mPayload="Hello buggeroo Second World!")
+            self._logger._log(msg)
+            #self._logger.close()
 
+            time.sleep(5)
+            self._logger.close()
             return
 
             if config.get("log_info_messages") and config["log_info_messages"].lower() == "true":
@@ -145,6 +149,13 @@ class PiLogger():
             else:
                 print("Exception in client! Errno: {0}".format(errno.errorcode))
                 traceback.print_exc()
+
+    def __del__(self):
+        """ """
+        try:
+            self._logger.close()
+        except Exception as ex:
+            eprint(time_message(ex))
 
 
 class PiLogError(Exception):
