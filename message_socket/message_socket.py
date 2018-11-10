@@ -83,29 +83,24 @@ class MessageError(Exception):
         return repr(self._message)
 
 class MessageType(Enum):
-    handshake = 0
-    read_file = 1
-    write_file = 2
-    confirmation = 3
-    error = 4
-    eof = 5
-    LOG = 6
-    METRIC = 7
-    DISCONNECT = 8
+    LOG = 0
+    METRIC = 1
+    DISCONNECT = 2
 
 class MessageLevel(Enum):
     INFO = 0
     WARNING = 1
     ERROR = 2
 
-class PiLogMsg:
-    def __init__(self, mType=None, mPayload=None, mMessageLevel=MessageLevel.INFO):
+class PiLogMsg:    
+    def __init__(self, mType=None, mPayload=None, mMessageLevel=MessageLevel.INFO, mId=0):
         if mType is None:
             raise MessageError("Object of type 'Message' must be assigned a type.")
 
         if mPayload is None and mType != MessageType.DISCONNECT:
             raise MessageError("Object of type 'Message' cannot have an empty payload.")
 
+        self._id = mId
         self._level = mMessageLevel
         self._type = mType
         self._payload = mPayload
@@ -121,3 +116,7 @@ class PiLogMsg:
     @property
     def level(self):
         return self._level
+
+    @property
+    def id(self):
+        return self._id

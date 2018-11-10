@@ -6,11 +6,15 @@ import time
 import traceback
 import errno
 
+from utilities.utilities import tprint, eprint, time_message
 from message_socket.message_socket import MessageSocket, MessageType, MessageLevel, PiLogMsg
+from .mmapper import Mmapper 
 
 class PiLogger():
-    DEFAULT_DIR = os.path.join(os.getcwd(), "pilog_logs/")
-    LOG_FILE = "pilog_tmp_log"
+    DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "logs", "pilog_logs/")
+    #DEFAULT_DIR = os.path.join(os.getcwd(), "pilog_logs/")
+    LOG_FILE_PRIMARY = "pilog_tmp_log"
+    LOG_FILE_SECONDARY = "pilog_tmp_log2"
     LOG_FILE_SIZE = 10*1024*1024
 
     def __init__(self, config): #host, port, logDirectory = None):
@@ -34,9 +38,23 @@ class PiLogger():
 
             self._host = config["host"]
             self._port = config["port"]
-            self.initialize_log_dir(config.get("log_directory"))
-            self._logFilePath = os.path.join(self._logDirectory, self.LOG_FILE)
-            self.initialize_log_file()
+
+            logDir = config.get("log_directory")
+            if not logDir:
+                logDir = self.DEFAULT_DIR
+
+            self._logger = Mmapper(logDir, self.LOG_FILE_SIZE, self.LOG_FILE_PRIMARY, self.LOG_FILE_SECONDARY)
+
+            if not self._logger.open():
+                raise PiLogError("Failed to open memory mapped file.")
+
+            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=0, mPayload="Hello World!")
+            self._logger.log(msg)
+            self._logger.force_swap()
+            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=1, mPayload="Hello Second World!")
+            self._logger.log(msg)
+
+            return
 
             if config.get("log_info_messages") and config["log_info_messages"].lower() == "true":
                 self._logInfoMessages = True
@@ -44,65 +62,18 @@ class PiLogger():
                 self._logInfoMessages = False
 
             if self._verbose:
-                self.tprint("Starting PiLogger with arguments:")
-                self.tprint("Host: {0}".format(self._host))
-                self.tprint("Port: {0}".format(self._port))
-                self.tprint("Log Directory: {0}".format(self._host))
-                self.tprint("Host: {0}".format(self._host))
-                self.tprint("Host: {0}".format(self._host))
+                tprint("Starting PiLogger with arguments:")
+                tprint("Host: {0}".format(self._host))
+                tprint("Port: {0}".format(self._port))
+                tprint("Log Directory: {0}".format(self._host))
+                tprint("Host: {0}".format(self._host))
+                tprint("Host: {0}".format(self._host))
 
             self.intialize(self._host, self._port)
 
         except KeyError as ex:
             cause = ex.args[0]
-            self.eprint(self.time_message("Required configuration key \"{0}\" was not supplied.".format(cause)))
-
-    
-    def initialize_log_file(self):
-        """ initializes the log file """
-        try:
-            if os.path.exists(self._logFilePath):
-                fs = os.stat(self._logFilePath).st_size
-                if fs < self.LOG_FILE_SIZE:
-                    self.increase_file_size(self._logFilePath, self.LOG_FILE_SIZE)
-            else:
-                #increase_file_size will create the file if it doesn't exist
-                self.increase_file_size(self._logFilePath, self.LOG_FILE_SIZE)
-        except Exception as ex:
-                self.eprint(self.time_message("CRTICIAL ERROR: Unable to create log file"))
-                raise ex
-    
-            
-    def increase_file_size(self, file, sz):
-        """ opens a file and seeks to a point to write a byte, causing it to be that size """
-        with open(file, "wb") as fd:
-            fd.seek(sz-1)
-            fd.write(b"\0")
-            fd.close()
-
-    def tprint(self, msg):
-        print(time_print(msg))
-
-    def initialize_log_dir(self, logDirectory):
-        """ ensures that the either the supplied directory or the default store directory has been created """
-        if logDirectory:
-            if not os.path.exists(logDirectory):
-                self.try_mkdir(logDirectory, errorMsg="LogDirectory did not exist and could not be created")
-                self._logDirectory = logDirectory
-            elif not os.path.isdir(logDirectory):
-                raise PiLogError("Supplied log directory is not a directory")
-        else: 
-            if not os.path.exists(self.DEFAULT_DIR):
-                self.try_mkdir(self.DEFAULT_DIR, errorMsg="No log directory supplied and default directory could not be created")
-            self._logDirectory = self.DEFAULT_DIR
-                    
-    def try_mkdir(self, dir, errorMsg="Could not make directory"):
-        """ wraps mkdir in a try block with optional specified error message and mode """
-        try:
-            os.mkdir(dir, 0o755)
-            #os.chmod(dir, 0o664)
-        except:
-            raise PiLogError(errorMsg)
+            eprint(time_message("Required configuration key \"{0}\" was not supplied.".format(cause)))
 
     def initialize(self):
         """ attempts to reinitialize with the currently specified host and port """
@@ -123,11 +94,11 @@ class PiLogger():
             self._socket = MessageSocket(sock)
             self._initialized = True
         except socket.gaierror as e:
-            self.eprint(self.time_message("Error initializing socket. Invalid hostname: {0}".format(host)))
+            eprint(time_message("Error initializing socket. Invalid hostname: {0}".format(host)))
         except ConnectionRefusedError as e:
-            self.eprint(self.time_message("{0}:{1} - Connection refused.".format(ip,port)))
+            eprint(time_message("{0}:{1} - Connection refused.".format(ip,port)))
         except Exception as e:
-            self.eprint(self.time_message("error initializing PiLogger"))
+            eprint(time_message("error initializing PiLogger"))
             raise e
 
     def info(self, msg):
@@ -152,12 +123,12 @@ class PiLogger():
         try:
             self._socket.send_message(msg)
         except Exception as e:
-            self.eprint(self.time_message(e))
+            eprint(time_message(e))
 
     def start(self):
         """ starts the client thread  """
         if not _initialized:
-            self.eprint("Not initalized. Run initialize(host, port) or try to reinitialize with initialize()")
+            eprint("Not initalized. Run initialize(host, port) or try to reinitialize with initialize()")
 
         try:
             for i in range(0, 10):
@@ -175,17 +146,6 @@ class PiLogger():
                 print("Exception in client! Errno: {0}".format(errno.errorcode))
                 traceback.print_exc()
 
-    def eprint(self, *args, **kwargs):
-        print(*args, file=sys.stderr, **kwargs)
-
-    def time_message(self, message):
-        return datetime.now().strftime("!! %H:%M:%S - ") + "{0}".format(message)
-
 
 class PiLogError(Exception):
-    def __init__(self, msg):
-        super(msg)
-        self._msg = msg
-
-    def __str__(self):
-        return repr(self._msg)
+    pass
