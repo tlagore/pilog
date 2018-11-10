@@ -16,8 +16,11 @@ class Mmapper:
         self._primaryFile = os.path.join(logDir, primary)
         self._secondaryFile = os.path.join(logDir, secondary)
         self._fileSize = int(fileSize / 2)
-        self._swapLock = threading.Lock()
+
         self._writeLock = threading.Lock()
+        self._logLock = threading.Lock()
+        self._iterLock = threading.Lock()
+
         self._msgQueue = Queue(2500)
         self._failedPuts = 0
 
@@ -60,10 +63,9 @@ class Mmapper:
             try:
                 if self._running:
                     msg = self._msgQueue.get(True, 2)
+                    self._log(msg)
             except Empty as ex:
                 # simply means we couldn't get an item in the timeout
-                print(time_message("Worker {0} no messages".format(workerNum))) 
-                print(self._running)
                 continue
             except Exception as ex:
                 eprint(time_message("Exception in handle_messages! {0}".format(ex)))
@@ -76,25 +78,32 @@ class Mmapper:
         try:
             self._msgQueue.put_nowait(msg)
         except Full as ex:
-            self._failedPuts += 1
+            with self._iterLock:
+                self._failedPuts += 1
+            if (self._failedPuts > self.MAX_PUT_FAILS):
+                eprint(time_message("MMapper is failing to queue messages. Could be falling behind. {0} failed puts so far.".format(self._failedPuts)))
 
     def _log(self, msg):
         payload = msg.payload.encode(encoding='UTF-8')
-        if (self._index + (len(payload) + self.HEADER_SIZE) <= self._fileSize):
-            lvl = struct.pack("I", int(msg.level.value))
-            msgid = struct.pack("I", int(msg.id))
-            length = struct.pack("I", len(payload))
-            reserved = struct.pack("I", 0)
 
-            self._write_field(lvl)
-            self._write_field(msgid)
-            self._write_field(length)
-            self._write_field(reserved)
-            self._write_field(payload)
+        #should decide if we want to force a write when we fill or discard the logs until write is requested
+        #currently just discarding
+        with self._logLock:
+            if (self._index + (len(payload) + self.HEADER_SIZE) <= self._fileSize):
+                lvl = struct.pack("I", int(msg.level.value))
+                msgid = struct.pack("I", int(msg.id))
+                length = struct.pack("I", len(payload))
+                reserved = struct.pack("I", 0)
+
+                self._write_field(lvl)
+                self._write_field(msgid)
+                self._write_field(length)
+                self._write_field(reserved)
+                self._write_field(payload)
 
 
     def _write_field(self, field):
-        print("_mcurrent[{0}:{1}] {2}".format(self._index, len(field), field))
+        """ Write a field to the mapped files current index. Assumes space check has already been done """
         self._mcurrent[self._index:self._index+len(field)] = field
         self._index += len(field) + 1
         self._mcurrent.seek(self._index)
@@ -104,7 +113,9 @@ class Mmapper:
 
     def _swap(self):
         """ swaps the current memory mapped file and  """
-        with self._swapLock:
+        with self._logLock:
+            self._mcurrent.flush()
+
             temp  = self._mcurrent
             self._mcurrent = self._msecondary
             self._msecondary = temp

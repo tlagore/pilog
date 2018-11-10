@@ -49,12 +49,15 @@ class PiLogger():
             if not self._logger.open():
                 raise PiLogError("Failed to open memory mapped file.")
 
-            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=0, mPayload="Hello diddily World!")
-            self._logger._log(msg)
+            for i in range(0, 25):
+                msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello First World {0}!".format(i))
+                self._logger.log(msg)
+
             self._logger.force_swap()
-            msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=1, mPayload="Hello buggeroo Second World!")
-            self._logger._log(msg)
-            #self._logger.close()
+
+            for i in range(0, 25):
+                msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello buggeroo Second World {0}!".format(i))
+                self._logger.log(msg)
 
             time.sleep(5)
             self._logger.close()
