@@ -14,8 +14,7 @@ from .mmapper import Mmapper
 class PiLogger():
     DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "logs", "pilog_logs/")
     #DEFAULT_DIR = os.path.join(os.getcwd(), "pilog_logs/")
-    LOG_FILE_PRIMARY = "pilog_tmp_log"
-    LOG_FILE_SECONDARY = "pilog_tmp_log2"
+    LOG_FILE_BASE = "pilog_tmp_log"
     LOG_FILE_SIZE = 10*1024*1024
 
     def __init__(self, config): #host, port, logDirectory = None):
@@ -44,21 +43,29 @@ class PiLogger():
             if not logDir:
                 logDir = self.DEFAULT_DIR
 
-            self._logger = Mmapper(logDir, self.LOG_FILE_SIZE, self.LOG_FILE_PRIMARY, self.LOG_FILE_SECONDARY)
+            logFileBase = config.get("log_file_base")
+            if not logFileBase:
+                logFileBase = self.LOG_FILE_BASE
+
+            self._logger = Mmapper(logDir, self.LOG_FILE_SIZE, logFileBase)
 
             if not self._logger.open():
                 raise PiLogError("Failed to open memory mapped file.")
 
-            for i in range(0, 25):
-                msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello First World {0}!".format(i))
-                self._logger.log(msg)
+            for j in range(0, 1000):
+                for i in range(0, 25):
+                    msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello First World {0}!".format(i))
+                    self._logger.log(msg)
 
-            self._logger.force_swap()
 
-            for i in range(0, 25):
-                msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello buggeroo Second World {0}!".format(i))
-                self._logger.log(msg)
+                    print("swapping")
+                    self._logger.force_swap()
 
+                for i in range(0, 25):
+                    msg = PiLogMsg(mType=MessageType.LOG, mMessageLevel=MessageLevel.INFO, mId=i, mPayload="Hello buggeroo Second World {0}!".format(i))
+                    self._logger.log(msg)
+
+            print("waiting")
             time.sleep(5)
             self._logger.close()
             return
