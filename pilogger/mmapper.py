@@ -127,6 +127,7 @@ class Mmapper:
         self._indices[worker][activeFile] += len(field) + 1
 
     def force_swap(self):
+        """  """
         for i in range(0, self.NUM_WORKERS):
             self._swap(i)
 
@@ -144,9 +145,6 @@ class Mmapper:
 
                 self._activeFiles[worker] = newIndex
                 self._indices[worker][newIndex] = 0
-
-    def write_log(self):
-        """ """
 
     def close(self):
         """ """

@@ -9,7 +9,7 @@ import errno
 
 from utilities.utilities import tprint, eprint, time_message
 from message_socket.message_socket import MessageSocket, MessageType, MessageLevel, PiLogMsg
-from .mmapper import Mmapper 
+from .mmapper import Mmapper
 
 class PiLogger():
     DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "logs", "pilog_logs/")
